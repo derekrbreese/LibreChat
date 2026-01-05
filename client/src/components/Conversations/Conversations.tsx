@@ -32,6 +32,8 @@ interface ConversationsProps {
   isSearchLoading: boolean;
   isChatsExpanded: boolean;
   setIsChatsExpanded: (expanded: boolean) => void;
+  expandedGroups: Record<string, boolean>;
+  setExpandedGroups: (groups: Record<string, boolean>) => void;
 }
 
 interface MeasuredRowProps {
@@ -95,15 +97,33 @@ const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle }) => {
 
 ChatsHeader.displayName = 'ChatsHeader';
 
-const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupName, isFirst }) => {
+interface DateLabelProps {
+  groupName: string;
+  isFirst?: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+const DateLabel: FC<DateLabelProps> = memo(({ groupName, isFirst, isExpanded, onToggle }) => {
   const localize = useLocalize();
   return (
-    <h2
-      className={cn('pl-1 pt-1 text-text-secondary', isFirst === true ? 'mt-0' : 'mt-2')}
+    <button
+      onClick={onToggle}
+      className={cn(
+        'group flex w-full items-center justify-between pl-1 pr-2 pt-1 text-text-secondary hover:text-text-primary',
+        isFirst === true ? 'mt-0' : 'mt-2',
+      )}
       style={{ fontSize: '0.7rem' }}
+      type="button"
     >
-      {localize(groupName as TranslationKeys) || groupName}
-    </h2>
+      <span className="select-none">{localize(groupName as TranslationKeys) || groupName}</span>
+      <ChevronDown
+        className={cn(
+          'h-3 w-3 opacity-0 transition-all duration-200 group-hover:opacity-100',
+          !isExpanded && '-rotate-90',
+        )}
+      />
+    </button>
   );
 });
 
@@ -157,6 +177,8 @@ const Conversations: FC<ConversationsProps> = ({
   isSearchLoading,
   isChatsExpanded,
   setIsChatsExpanded,
+  expandedGroups,
+  setExpandedGroups,
 }) => {
   const localize = useLocalize();
   const search = useRecoilValue(store.search);
@@ -187,6 +209,23 @@ const Conversations: FC<ConversationsProps> = ({
     [filteredConversations],
   );
 
+  // Helper to check if a group is expanded (default to true)
+  const isGroupExpanded = useCallback(
+    (groupName: string) => expandedGroups[groupName] !== false,
+    [expandedGroups],
+  );
+
+  // Toggle a specific date group's expansion state
+  const toggleGroup = useCallback(
+    (groupName: string) => {
+      setExpandedGroups({
+        ...expandedGroups,
+        [groupName]: !isGroupExpanded(groupName),
+      });
+    },
+    [expandedGroups, setExpandedGroups, isGroupExpanded],
+  );
+
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = [];
     // Only include favorites row if FavoritesList will render content
@@ -198,7 +237,10 @@ const Conversations: FC<ConversationsProps> = ({
     if (isChatsExpanded) {
       groupedConversations.forEach(([groupName, convos]) => {
         items.push({ type: 'header', groupName });
-        items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
+        // Only include conversations if the group is expanded
+        if (isGroupExpanded(groupName)) {
+          items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
+        }
       });
 
       if (isLoading) {
@@ -206,7 +248,7 @@ const Conversations: FC<ConversationsProps> = ({
       }
     }
     return items;
-  }, [groupedConversations, isLoading, isChatsExpanded, shouldShowFavorites]);
+  }, [groupedConversations, isLoading, isChatsExpanded, shouldShowFavorites, isGroupExpanded]);
 
   // Store flattenedItems in a ref for keyMapper to access without recreating cache
   const flattenedItemsRef = useRef(flattenedItems);
@@ -262,6 +304,19 @@ const Conversations: FC<ConversationsProps> = ({
     return () => cancelAnimationFrame(frameId);
   }, [favorites.length, isFavoritesLoading, clearFavoritesCache]);
 
+  // Clear cache when date groups are expanded/collapsed
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => {
+      if (cache) {
+        cache.clearAll();
+        if (containerRef.current && 'recomputeRowHeights' in containerRef.current) {
+          containerRef.current.recomputeRowHeights(0);
+        }
+      }
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [expandedGroups, cache, containerRef]);
+
   const rowRenderer = useCallback(
     ({ index, key, parent, style }) => {
       const item = flattenedItems[index];
@@ -305,7 +360,12 @@ const Conversations: FC<ConversationsProps> = ({
         const firstHeaderIndex = shouldShowFavorites ? 2 : 1;
         return (
           <MeasuredRow key={key} {...rowProps}>
-            <DateLabel groupName={item.groupName} isFirst={index === firstHeaderIndex} />
+            <DateLabel
+              groupName={item.groupName}
+              isFirst={index === firstHeaderIndex}
+              isExpanded={isGroupExpanded(item.groupName)}
+              onToggle={() => toggleGroup(item.groupName)}
+            />
           </MeasuredRow>
         );
       }
@@ -337,6 +397,8 @@ const Conversations: FC<ConversationsProps> = ({
       setIsChatsExpanded,
       shouldShowFavorites,
       activeJobIds,
+      isGroupExpanded,
+      toggleGroup,
     ],
   );
 

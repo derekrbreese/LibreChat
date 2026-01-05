@@ -81,6 +81,10 @@ const Nav = memo(
     const isSmallScreen = useMediaQuery('(max-width: 768px)');
     const [newUser, setNewUser] = useLocalStorage('newUser', true);
     const [isChatsExpanded, setIsChatsExpanded] = useLocalStorage('chatsExpanded', true);
+    const [expandedGroups, setExpandedGroups] = useLocalStorage<Record<string, boolean>>(
+      'expandedDateGroups',
+      {},
+    );
     const [showLoading, setShowLoading] = useState(false);
     const [tags, setTags] = useState<string[]>([]);
 
@@ -244,6 +248,8 @@ const Nav = memo(
                 isSearchLoading={isSearchLoading}
                 isChatsExpanded={isChatsExpanded}
                 setIsChatsExpanded={setIsChatsExpanded}
+                expandedGroups={expandedGroups}
+                setExpandedGroups={setExpandedGroups}
               />
             </div>
           </div>
